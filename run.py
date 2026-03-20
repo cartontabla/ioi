@@ -1,10 +1,12 @@
 from backend.server import app, camera, mqtt
+import config
 
 if __name__ == '__main__':
     try:
         camera.start()
         mqtt.connect()
-        app.run(host='0.0.0.0', port=5000, debug=False)
+        # Use config for port (default 5001 to avoid AirPlay on macOS)
+        app.run(host=config.FLASK_HOST, port=config.FLASK_PORT, debug=config.FLASK_DEBUG)
     except KeyboardInterrupt:
         camera.stop()
         print('Shutting down')

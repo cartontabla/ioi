@@ -20,8 +20,6 @@ class MQTTClient:
             print('MQTT publish error:', e)
 
     def subscribe(self, topic, callback=None):
-        def _on_message(client, userdata, msg):
-            if callback:
-                callback(msg.topic, msg.payload)
-        self.client.on_message = _on_message
+        if callback:
+            self.client.message_callback_add(topic, lambda client, userdata, msg: callback(msg.topic, msg.payload))
         self.client.subscribe(topic)

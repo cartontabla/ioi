@@ -20,7 +20,7 @@ class SmartCamera:
     Provides an MJPEG generator for streaming and simple capture/health APIs.
     """
 
-    def __init__(self, resolution=(640, 480), framerate=24, ring_size=32):
+    def __init__(self, resolution=(640, 480), framerate=24, ring_size=32, use_picamera=True):
         self.resolution = resolution
         self.framerate = framerate
         self.ring = deque(maxlen=ring_size)
@@ -29,11 +29,12 @@ class SmartCamera:
         self.running = False
         self.source = None
         self._thread = None
+        self._use_picamera = use_picamera
 
     def start(self):
         if self.running:
             return
-        if PICAMERA_AVAILABLE:
+        if PICAMERA_AVAILABLE and self._use_picamera:
             self.source = 'picamera'
             self._thread = Thread(target=self._picamera_loop, daemon=True)
         else:

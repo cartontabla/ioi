@@ -29,11 +29,11 @@ MQTT_TLS = os.environ.get('MQTT_TLS', 'false').lower() == 'true'
 
 # ===== Flask Configuration =====
 FLASK_HOST = os.environ.get('FLASK_HOST', '0.0.0.0')
-FLASK_PORT = int(os.environ.get('FLASK_PORT', '5000'))
+FLASK_PORT = int(os.environ.get('FLASK_PORT', '5001'))  # 5000 = AirPlay on macOS
 FLASK_DEBUG = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
 
 # ===== Storage Configuration =====
-BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 STORAGE_DIR = os.environ.get('STORAGE_DIR', os.path.join(BASE_DIR, 'storage'))
 os.makedirs(STORAGE_DIR, exist_ok=True)
 

@@ -25,7 +25,7 @@ install:
 	@echo "✓ Environment ready. Activate with: source venv/bin/activate"
 
 dev:
-	@echo "Starting Smart Camera backend (localhost:5000)..."
+	@echo "Starting Smart Camera backend (localhost:5001)..."
 	. venv/bin/activate && python3 run.py
 
 test:

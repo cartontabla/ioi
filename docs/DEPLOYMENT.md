@@ -30,7 +30,7 @@ vim backend/camera.py
 # Ctrl+C en Terminal 1, volver a ejecutar
 
 # Terminal 3: Probar con curl
-curl -X POST http://localhost:5000/api/capture
+curl -X POST http://localhost:5001/api/capture
 ```
 
 **Cuando funciona localmente**, commit + push:
@@ -176,7 +176,7 @@ ssh-copy-id -i ~/.ssh/id_ed25519 pi@192.168.1.100
 ## Checklist para despliegue a producción
 
 - [ ] `make test` pasa sin errores en local
-- [ ] Backend responde `curl http://localhost:5000/api/health`
+- [ ] Backend responde `curl http://localhost:5001/api/health`
 - [ ] Cambios commiteados: `git status` limpio
 - [ ] SSH funciona: `ssh pi@<IP> echo OK`
 - [ ] `make deploy PI_HOST=<IP>` completa sin errores
