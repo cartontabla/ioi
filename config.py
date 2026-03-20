@@ -37,6 +37,16 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 PROJECTS_DIR = os.environ.get('PROJECTS_DIR', os.path.join(BASE_DIR, 'projects'))
 os.makedirs(PROJECTS_DIR, exist_ok=True)
 
+
+def to_http_path(abs_path: str) -> str:
+    """Convert an absolute file path to its /files/... HTTP URL path."""
+    from pathlib import Path
+    try:
+        rel = Path(abs_path).relative_to(PROJECTS_DIR)
+        return f"/files/{rel.as_posix()}"
+    except ValueError:
+        return None
+
 # ===== Logging Configuration =====
 LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
 LOG_FILE = os.environ.get('LOG_FILE', None)  # None = stdout

@@ -32,6 +32,9 @@ def capture_frame():
 
     result = CaptureFrame().run(_camera(), output_dir, params=j)
 
+    if result['ok']:
+        result['frame']['http_path'] = config.to_http_path(result['frame']['image_path'])
+
     if result['ok'] and config.ENABLE_MQTT:
         _mqtt().publish('camera/result/frame_ready', json.dumps({
             'frame_id': result['frame']['frame_id'],

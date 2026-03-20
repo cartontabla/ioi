@@ -57,10 +57,19 @@ def quality_check():
 def generate_preview():
     from backend.blocks.edge.preview import GeneratePreview
     j = request.get_json(silent=True) or {}
+    input_path = j['image_path']
+    # Derive thumbnails dir from image path if not provided
+    # Assumes image lives in .../raw/ → thumbnails go in .../thumbnails/
+    if 'output_dir' in j:
+        output_dir = Path(j['output_dir'])
+    else:
+        output_dir = Path(input_path).parent.parent / 'thumbnails'
     result = GeneratePreview().run(
-        input_path=j['input_path'],
-        output_dir=Path(j.get('output_dir', config.PROJECTS_DIR)),
-        max_size=j.get('max_size', 512),
-        quality=j.get('quality', 85),
+        input_path=input_path,
+        output_dir=output_dir,
+        max_size=j.get('max_size', 800),
+        quality=j.get('quality', 90),
     )
+    if result['ok']:
+        result['http_path'] = config.to_http_path(result['preview_path'])
     return jsonify(result), 200 if result['ok'] else 500
