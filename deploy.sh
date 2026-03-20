@@ -1,65 +1,50 @@
 #!/bin/bash
-# Deploy code to Raspberry Pi (that already has Python, Node-RED, mosquitto, picamera installed)
+# Deploy code to Raspberry Pi
 # Usage: ./deploy.sh <pi_host> [<pi_user>]
-# Example: ./deploy.sh 192.168.1.100 pi
+# Example: ./deploy.sh 192.168.0.36 lino
 
 set -e
 
 PI_HOST=${1:-}
-PI_USER=${2:-pi}
+PI_USER=${2:-lino}
 
 if [ -z "$PI_HOST" ]; then
     echo "Usage: ./deploy.sh <pi_host> [<pi_user>]"
-    echo "Example: ./deploy.sh 192.168.1.100 pi"
     exit 1
 fi
 
 PI_SSH="${PI_USER}@${PI_HOST}"
-REMOTE_DIR="/home/${PI_USER}/smartcam"
+REMOTE_DIR="/home/${PI_USER}/IOI"
 
-echo "=== Smart Camera Code Deployment to Raspberry Pi ==="
-echo "Target: $PI_SSH"
-echo ""
+echo "=== IOI Deploy → $PI_SSH:$REMOTE_DIR ==="
 
 # 1. Check SSH
-echo "[1/3] Checking SSH connection..."
-if ! ssh -o ConnectTimeout=3 "$PI_SSH" "echo 'OK'" > /dev/null 2>&1; then
-    echo "❌ Cannot connect to $PI_SSH"
-    echo "   Try: ssh-copy-id $PI_USER@$PI_HOST"
+echo "[1/3] Checking SSH..."
+if ! ssh -o ConnectTimeout=5 "$PI_SSH" "echo OK" > /dev/null 2>&1; then
+    echo "Cannot connect to $PI_SSH"
+    echo "Run: ssh-copy-id $PI_USER@$PI_HOST"
     exit 1
 fi
-echo "✓ SSH OK"
+echo "SSH OK"
 
-# 2. Sync code
+# 2. Sync code (no venv, no cache, no local projects data)
 echo "[2/3] Syncing code..."
-rsync -avz --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' \
-    --exclude='venv' --exclude='storage/*.jpg' --exclude='.DS_Store' \
-    . "$PI_SSH:$REMOTE_DIR/" > /dev/null
-echo "✓ Code synced to $REMOTE_DIR"
+rsync -avz --progress \
+    --exclude='.git' \
+    --exclude='__pycache__' \
+    --exclude='*.pyc' \
+    --exclude='venv' \
+    --exclude='projects/' \
+    --exclude='.DS_Store' \
+    . "$PI_SSH:$REMOTE_DIR/"
+echo "Code synced"
 
-# 3. Install Python deps (assuming Pi already has venv + mosquitto + picamera setup)
-echo "[3/3] Installing Python dependencies on Pi..."
-ssh "$PI_SSH" << 'EOF'
-    cd ~/smartcam
-    if [ ! -d venv ]; then
-        python3 -m venv venv
-    fi
-    source venv/bin/activate
-    pip install --upgrade pip setuptools wheel > /dev/null 2>&1
-    pip install -r requirements.txt > /dev/null 2>&1 || true
-    echo "✓ Dependencies OK"
-EOF
+# 3. Install Python deps with system Python (no venv on Pi)
+echo "[3/3] Installing dependencies..."
+ssh "$PI_SSH" "cd $REMOTE_DIR && pip3 install -r requirements.txt --break-system-packages -q 2>/dev/null || pip3 install -r requirements.txt -q"
+echo "Dependencies OK"
 
 echo ""
-echo "✅ Deployment complete!"
-echo ""
-echo "Restart backend on Pi:"
+echo "Deploy complete. To start the backend on the Pi:"
 echo "  ssh $PI_SSH"
-echo "  cd ~/smartcam"
-echo "  sudo systemctl restart smartcam"
-echo "  sudo journalctl -u smartcam -f"
-echo ""
-echo "Or if running manually:"
-echo "  source venv/bin/activate"
-echo "  python3 run.py"
-echo ""
+echo "  cd $REMOTE_DIR && python3 run.py"
