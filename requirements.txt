@@ -1,0 +1,7 @@
+flask
+flask-socketio
+eventlet
+paho-mqtt
+opencv-python
+numpy
+picamera
