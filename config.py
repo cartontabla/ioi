@@ -34,12 +34,8 @@ FLASK_DEBUG = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
 
 # ===== Storage Configuration =====
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-STORAGE_DIR = os.environ.get('STORAGE_DIR', os.path.join(BASE_DIR, 'storage'))
-os.makedirs(STORAGE_DIR, exist_ok=True)
-
-# Retention policy (optional)
-MAX_STORAGE_AGE_HOURS = int(os.environ.get('MAX_STORAGE_AGE_HOURS', '24'))
-MAX_STORAGE_SIZE_MB = int(os.environ.get('MAX_STORAGE_SIZE_MB', '1000'))
+PROJECTS_DIR = os.environ.get('PROJECTS_DIR', os.path.join(BASE_DIR, 'projects'))
+os.makedirs(PROJECTS_DIR, exist_ok=True)
 
 # ===== Logging Configuration =====
 LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
@@ -80,8 +76,7 @@ def print_config():
             'debug': FLASK_DEBUG,
         },
         'storage': {
-            'directory': STORAGE_DIR,
-            'max_age_hours': MAX_STORAGE_AGE_HOURS,
+            'projects_dir': PROJECTS_DIR,
         },
     }
     print(json.dumps(config, indent=2))
