@@ -5,16 +5,22 @@ from datetime import datetime
 
 from backend.camera import SmartCamera
 from backend.mqtt_client import MQTTClient
+import config
 
 app = Flask(__name__)
 
-camera = SmartCamera()
-mqtt = MQTTClient()
+camera = SmartCamera(
+    resolution=config.CAMERA_RESOLUTION,
+    framerate=config.CAMERA_FRAMERATE,
+    ring_size=config.CAMERA_RING_SIZE
+)
+mqtt = MQTTClient(
+    host=config.MQTT_HOST,
+    port=config.MQTT_PORT,
+    client_id=config.MQTT_CLIENT_ID
+)
 
-# storage dir for captured images (file references are passed around)
-BASE_DIR = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
-STORAGE_DIR = os.path.join(BASE_DIR, 'storage')
-os.makedirs(STORAGE_DIR, exist_ok=True)
+STORAGE_DIR = config.STORAGE_DIR
 
 
 @app.route('/stream')
@@ -94,4 +100,4 @@ if __name__ == '__main__':
     # Minimal run for development
     camera.start()
     mqtt.connect()
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host=config.FLASK_HOST, port=config.FLASK_PORT, debug=config.FLASK_DEBUG)

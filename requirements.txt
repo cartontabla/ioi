@@ -4,4 +4,6 @@ eventlet
 paho-mqtt
 opencv-python
 numpy
-picamera
+# picamera is only for Raspberry Pi; falls back to OpenCV on other systems
+# picamera2 (newer) or picamera (legacy) will be installed on Pi only
+# For development on Mac/Linux without camera, just comment out or skip
