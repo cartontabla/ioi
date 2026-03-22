@@ -1,242 +1,187 @@
-# Arquitectura de Smart Camera (modelo OSI-like)
+# Arquitectura IOI
+
+Sistema de captura de ortoimágenes científicas para documentación de obras de arte.
 
 ## Principios de diseño
-- **Modularidad tipo LEGO**: cada pieza colabora desde independencia absoluta
-- **Interfaces bien definidas**: cada capa exporta solo lo que necesita
-- **Referencias, no datos**: entre componentes se pasan URLs/paths, no blobs binarios
-- **Backend ejecuta, Node-RED orquesta**: separación clara MVC + cliente-servidor
 
-## Capas (modelo OSI inspirado)
+- **Modularidad LEGO**: cada componente es independiente y reemplazable
+- **Pipeline no destructivo**: los archivos maestros son siempre TIFF, nunca se modifican
+- **Referencias, no datos**: entre componentes se pasan paths/URLs, nunca blobs binarios
+- **Backend ejecuta, Node-RED orquesta**: separación clara cliente-servidor
+- **Sin over-engineering**: la mínima complejidad necesaria para el pipeline actual
 
-### Capa 1: Adquisición (Physical)
-**Responsabilidad**: capturar fotogramas del sensor
+---
 
-**Componentes**:
-- `SmartCamera` (backend/camera.py)
-  - Intenta usar `picamera.PiCamera` en Raspberry Pi
-  - Fallback a `cv2.VideoCapture(0)` si no está disponible
-  - Mantiene ring buffer en memoria para redundancia
+## Infraestructura
 
-**Interfaz saliente**:
-```python
-camera = SmartCamera()
-camera.start()              # inicia thread de captura
-frame = camera.get_frame()  # obtiene último fotograma (bytes JPEG)
-path = camera.capture_image('/path/to/file.jpg')  # guarda a archivo
-camera.stop()
+| Componente | Descripción |
+|---|---|
+| Raspberry Pi 3B | Hardware de producción (ioi.local, 192.168.0.39) |
+| Python 3 (sistema) | Backend Flask, sin venv |
+| picamera2 | Driver de cámara principal (Pi) |
+| OpenCV | Fallback para desarrollo en Mac |
+| Node-RED 4.x | Frontend visual (puerto 1880) |
+| Flask | Backend REST API (puerto 5001) |
+
+---
+
+## Estructura del repositorio
+
+```
+backend/
+  app.py              — Flask app, registro de blueprints, CORS, stream, /view
+  context.py          — Singletons compartidos (camera, mqtt)
+  config.py           — Configuración global, to_http_path()
+  run.py              — Entrypoint: inicia cámara, MQTT, Flask
+
+  devices/
+    camera.py         — SmartCamera: picamera2 + OpenCV fallback, ring buffer
+
+  models/
+    frame.py          — Frame (frame_id, image_path, metadata)
+    tile.py           — Tile (grid position, frames, calibración)
+    project.py        — OrthoProject (tiles, grid_spec, mosaico)
+
+  storage/
+    manager.py        — ProjectManager: CRUD de proyectos en disco
+
+  blocks/
+    edge/             — Bloques que ejecutan en la Pi
+      capture.py      — CaptureFrame, CaptureBurst, CaptureZStack
+      calibration.py  — ApplyDarkFrame, ApplyFlatField, ApplyLensCorrection
+      quality.py      — QualityCheck (sharpness, exposición, saturación)
+      preview.py      — GeneratePreview (JPEG thumbnail desde TIFF)
+    server/           — Adaptadores para backends externos
+      base.py         — ServerBackend (interfaz abstracta)
+      generic.py      — GenericHTTPBackend
+      fiji.py         — FijiBackend (stub)
+      comfyui.py      — ComfyUIBackend
+    project/          — Ciclo de vida de proyectos
+      create.py       — CreateProject
+      append.py       — AppendFrame
+      load.py         — LoadProject
+
+  api/
+    capture.py        — Blueprint /api/capture/*
+    blocks.py         — Blueprint /api/blocks/*
+    project.py        — Blueprint /api/project/*
+
+node-red/
+  flow.json           — Flujo principal (se despliega automáticamente con deploy.sh)
+
+projects/             — Almacenamiento en Pi (excluido del repo)
+  <project_id>/
+    raw/              — TIFF maestros (nunca modificar)
+    corrected/        — TIFF tras calibración
+    tiles/            — Teselas para el mosaico
+    thumbnails/       — JPEG previews
+    metadata/
+    logs/
 ```
 
 ---
 
-### Capa 2: Almacenamiento (Data Link)
-**Responsabilidad**: persistencia de archivos y referencias
+## API REST
 
-**Componentes**:
-- Directorio `storage/` (control local)
-- Endpoint Flask `GET /files/<filename>` (servicio HTTP)
+### Captura
 
-**Interfaz saliente**:
-```http
-GET /files/capture_20260320T120000_000000.jpg
-# Respuesta: binary JPEG data
+```
+POST /api/capture/frame
+  body: { "project_id": "nombre" }
+  response: { "ok": true, "frame": { "frame_id": "frame_a3f7c901", "image_path": "...", "http_path": "..." } }
+
+POST /api/capture/burst
+  body: { "project_id": "nombre", "n": 5 }
+```
+
+### Bloques de procesamiento
+
+```
+POST /api/blocks/preview
+  body: { "image_path": "/abs/path/frame.tiff", "max_size": 800, "quality": 90 }
+  response: { "ok": true, "http_path": "/files/project/thumbnails/frame.jpg" }
+
+POST /api/blocks/quality
+POST /api/blocks/calibration/dark
+POST /api/blocks/calibration/flat
+POST /api/blocks/calibration/lens
+```
+
+### Proyectos
+
+```
+POST /api/project/create      — crea un OrthoProject en disco
+GET  /api/project/list        — lista proyectos existentes
+GET  /api/project/<id>        — carga un proyecto
+POST /api/project/<id>/tile   — añade una tesela
+```
+
+### Utilidades
+
+```
+GET  /stream          — MJPEG stream en vivo
+GET  /view            — Página HTML simple (stream + capture)
+GET  /files/<path>    — Sirve archivos del directorio projects/
+GET  /api/health      — Estado del sistema
 ```
 
 ---
 
-### Capa 3: Procesamiento (Network)
-**Responsabilidad**: filtros, fusión, enhancements (futuro)
+## Flujo de datos: captura de frame
 
-**Componentes planeados**:
-- `ImageProcessor` (fusión HDR, denoise, stacking)
-- Endpoints como `POST /api/process` que aceptan `{"input_file": "...", "operation": "hdr"}`
-
-**Interfaz saliente**:
-```python
-processor.fuse_hdr([file1, file2, file3])  # → output_file
-processor.denoise(input_file)              # → output_file
+```
+Node-RED
+  [Set Project] ──→ global.project_id = "nombre"
+  [Capture Frame]
+       │
+       ▼
+  POST /api/capture/frame  { project_id }
+       │
+       ▼  Backend Flask
+  CaptureFrame.run()
+    ├─ camera.capture_still() → TIFF en projects/<id>/raw/frame_<hex>.tiff
+    └─ devuelve Frame { frame_id, image_path, http_path }
+       │
+       ▼
+  POST /api/blocks/preview  { image_path }
+       │
+       ▼
+  GeneratePreview.run()
+    └─ JPEG en projects/<id>/thumbnails/frame_<hex>.jpg
+       │
+       ▼
+  GET /files/<project>/thumbnails/frame_<hex>.jpg  (buffer binario)
+       │
+       ▼
+  Node-RED [image] → preview en el canvas
 ```
 
 ---
 
-### Capa 4: Control & Orquestación (Transport)
-**Responsabilidad**: coordinación entre capas y componentes
+## Fases del proyecto
 
-**Componentes**:
-- `MQTTClient` (backend/mqtt_client.py) — eventos y comandos
-- Flask REST (backend/server.py) — APIs síncronas
-
-**Interfaz saliente**:
-```python
-# MQTT (pub)
-mqtt.publish('camera/event', json.dumps({
-  'event': 'capture_saved',
-  'filename': 'capture_...jpg',
-  'path': '/files/capture_...jpg'
-}))
-
-# REST (GET/POST)
-POST /api/capture        → {"ok": true, "path": "/files/...", "filename": "..."}
-POST /api/start
-POST /api/stop
-```
+| Fase | Estado | Descripción |
+|---|---|---|
+| 1 | **Completa** | Captura de frame, preview en Node-RED |
+| 2 | Pendiente | Iluminación I2C + captura de teselas |
+| 3 | Pendiente | Registro espacial + ortomosaico |
+| 4 | Pendiente | Superresolución (redundancia subpíxel) |
+| 5 | Pendiente | Focus stacking (redundancia axial) |
+| 6 | Pendiente | Pirámides gigapíxel |
+| 7 | Pendiente | Integración IA externa (ComfyUI, Fiji) |
 
 ---
 
-### Capa 5: Sesión & Estado (Session)
-**Responsabilidad**: gestión de estado de flujos Node-RED
+## Deploy
 
-**Componentes**:
-- Node-RED context (almacén de estado por flujo)
-- Persistencia: archivos JSON en `/data/contexts` (Node-RED)
-
-**Interfaz saliente**:
-```javascript
-// Dentro de nodo Node-RED
-context.set('last_capture', msg.payload.filename);
-var last = context.get('last_capture');
+```bash
+./deploy.sh ioi.local
 ```
 
----
+Sincroniza código, instala dependencias Python, despliega `flow.json` a Node-RED y reinicia el servicio. La clave SSH debe estar en `~/.ssh/id_ed25519_ioi`.
 
-### Capa 6: Presentación (Presentation)
-**Responsabilidad**: formateo de datos, UI
-
-**Componentes**:
-- Nodos `json` (parse/stringify MQTT)
-- Nodos `http request` (fetch images)
-- Dashboards Node-RED (ui-dashboard)
-
-**Interfaz saliente**:
-```javascript
-// JSON parse/stringify
-msg.payload = JSON.parse(msg.payload);  // MQTT → JSON
-msg.payload = JSON.stringify(msg.payload);
+Para arrancar el backend en la Pi:
+```bash
+ssh -i ~/.ssh/id_ed25519_ioi lino@ioi.local
+cd ~/IOI && python3 run.py
 ```
-
----
-
-### Capa 7: Aplicación (Application)
-**Responsabilidad**: flujos de usuario, lógica de negocio
-
-**Componentes**:
-- Flujo Node-RED principal (`node-red/flow.json`)
-  - Trigger captura → POST /api/capture
-  - Escuchar MQTT events → GET /files/{filename} → save to /tmp/
-  - Dashboard: mostrar imágenes, historiales
-
-**Interfaz saliente**:
-```
-[Inject] → [HTTP POST capture] → [MQTT listener] → [HTTP GET file] → [File write] → [Dashboard]
-```
-
----
-
-## Flujo de datos: captura simple
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ Node-RED (Capa 7: Aplicación)                                   │
-├─────────────────────────────────────────────────────────────────┤
-│ [Trigger inject] ────→ [HTTP POST /api/capture]                │
-└─────────────────────────────────────────────────────────────────┘
-                             ↓
-┌─────────────────────────────────────────────────────────────────┐
-│ Backend Flask (Capa 6: Presentación + Capa 4: Transporte)      │
-├─────────────────────────────────────────────────────────────────┤
-│ POST /api/capture:                                              │
-│   ├─ SmartCamera.capture_image() [Capa 1]                       │
-│   ├─ guardar en storage/ [Capa 2]                               │
-│   └─ publish MQTT {"path": "/files/..."} [Capa 4]               │
-└─────────────────────────────────────────────────────────────────┘
-                             ↓
-┌─────────────────────────────────────────────────────────────────┐
-│ Node-RED (Capa 7)                                               │
-├─────────────────────────────────────────────────────────────────┤
-│ [MQTT listener] ← {"path": "/files/..."}                       │
-│       ↓                                                          │
-│ [HTTP GET /files/{filename}] ← binario JPEG [Capa 2]           │
-│       ↓                                                          │
-│ [File writer] → /tmp/capture.jpg                                │
-│       ↓                                                          │
-│ [Dashboard] → visualizar                                         │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Extensibilidad futura: backends remotos
-
-### Ej: ComfyUI para procesamiento de imagen
-
-**Capa 3 mejorada**:
-```python
-# backend/processors/comfyui.py
-class ComfyUIProcessor:
-    def __init__(self, url='http://comfyui-server:8188'):
-        self.url = url
-    
-    def upscale(self, input_file):
-        # 1. upload input_file → ComfyUI
-        # 2. run workflow (upscale)
-        # 3. download → output_file (en storage/)
-        # 4. retornar path relativo
-        return output_file
-```
-
-**Nuevo endpoint**:
-```
-POST /api/process
-{
-  "input": "capture_...jpg",
-  "backend": "comfyui",
-  "operation": "upscale"
-}
-→ {"ok": true, "output": "/files/capture_..._upscaled.jpg"}
-```
-
-**Node-RED lo consume igual**:
-```
-[Trigger] → [POST /api/process] → [MQTT event] → [HTTP GET] → [Display]
-```
-
----
-
-## Principios de comunicación inter-capas
-
-1. **MQTT (pub/sub)**:
-   - Eventos de bajo nivel (cámara iniciada, captura hecha)
-   - Payloads JSON (sin datos binarios)
-   - Bueno para: logging, triggers, coordinación async
-
-2. **REST/HTTP (req/resp)**:
-   - Comandos síncronos (capturar, procesar)
-   - Archivos binarios (imágenes, streams)
-   - Bueno para: operaciones que retornan resultado
-
-3. **Context/Estado (Node-RED)**:
-   - Persistencia local de flujo
-   - Cachés, flags, metadatos
-   - Bueno para: correlacionar eventos, guardar historial
-
----
-
-## Checklist de independencia
-
-Para que una nueva capa/componente sea "LEGO-compatible":
-
-- [ ] Define entrada/salida clara (API)
-- [ ] No accede directamente a capas no adyacentes
-- [ ] Manejo de errores robusto (fallbacks)
-- [ ] Testeable en aislamiento
-- [ ] Documentado con ejemplos
-
----
-
-## Ejemplos de futuros módulos
-
-- **Capa 1+**: Sensores adicionales (temperature, luz, distancia)
-- **Capa 3**: ML inference (object detection, face recognition)
-- **Capa 5**: Persistencia de metadatos en BD (InfluxDB, SQLite)
-- **Capa 7**: Webhooks HTTP para notificaciones externas
-
-Cada uno sigue el mismo patrón de interfaces limpias y referencias.

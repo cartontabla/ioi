@@ -1,192 +1,93 @@
-# Workflow: Desarrollo en Mac → Despliegue en Raspberry Pi
+# Deploy — Mac → Raspberry Pi
 
-## Filosofía
-1. **Develop locally on Mac**: testear sin hardware especializado (fallback OpenCV)
-2. **Deploy to Pi**: cuando esté listo, copiar código y correr en hardware real
-3. **Iterate**: cambios locales → git push → git pull en Pi → reload servicio
+## Infraestructura
 
-## Flujo rápido
+| Elemento | Valor |
+|---|---|
+| Pi hostname | ioi.local |
+| Pi IP | 192.168.0.39 |
+| Pi usuario | lino |
+| SSH key | `~/.ssh/id_ed25519_ioi` |
+| Backend puerto | 5001 |
+| Node-RED puerto | 1880 |
 
-### Primera vez: setup completo
-```bash
-cd ~/IOI
-./setup.sh
-# Responde preguntas sobre tu Pi (IP, usuario)
-# Script hace: local test + deploy + instrucciones finales
-```
+---
 
-### Desarrollo iterativo
-
-**En tu Mac** (dentro de `~/IOI`):
-```bash
-# Terminal 1: Backend
-source venv/bin/activate
-python3 run.py
-# Logs en stdout, Ctrl+C para parar
-
-# Terminal 2: Editar código
-vim backend/camera.py
-# hacer cambios...
-# Ctrl+C en Terminal 1, volver a ejecutar
-
-# Terminal 3: Probar con curl
-curl -X POST http://localhost:5001/api/capture
-```
-
-**Cuando funciona localmente**, commit + push:
-```bash
-git add .
-git commit -m "Feature: add HDR processing"
-git push origin main
-```
-
-**En la Raspberry Pi**:
-```bash
-# SSH desde Mac
-ssh pi@192.168.1.100
-
-# En la Pi
-cd ~/smartcam
-git pull origin main
-
-# Si es servicio systemd
-sudo systemctl restart smartcam
-sudo journalctl -u smartcam -f
-
-# Si es manual
-source venv/bin/activate
-python3 run.py
-```
-
-## Comandos útiles (desde tu Mac)
+## Deploy completo
 
 ```bash
-# Setup inicial
-make install          # Crear venv + instalar deps
-
-# Desarrollo
-make dev             # Correr backend local (localhost:5000)
-make test            # Suite de pruebas
-make clean           # Limpiar venv y cache
-
-# Despliegue
-make deploy PI_HOST=192.168.1.100
-
-# Sincronizar cambios (sin git)
-make sync PI_HOST=192.168.1.100  # (próximamente)
+./deploy.sh ioi.local
 ```
 
-## Requisitos en tu Mac
+Esto hace en orden:
+1. Verifica SSH
+2. Sincroniza código vía rsync (excluye `projects/`, `__pycache__`, `.git`)
+3. Instala dependencias Python (`pip3 install -r requirements.txt`)
+4. Reinicia el backend Python (puerto 5001)
+5. Copia `node-red/flow.json` → `~/.node-red/flows.json` y reinicia Node-RED
+
+---
+
+## Servicios en la Pi
+
+### Backend Flask
 
 ```bash
-# Check que tienes Python 3
-python3 --version    # 3.7+
+# Ver si está corriendo
+curl http://ioi.local:5001/api/health
 
-# Check que git está instalado
-git --version
+# Ver logs
+ssh -i ~/.ssh/id_ed25519_ioi lino@ioi.local "cat /tmp/ioi_backend.log"
 
-# SSH acceso a Pi (copiar clave si no la tienes)
-ssh-keygen -t ed25519
-ssh-copy-id pi@192.168.1.100
+# Arrancar manualmente
+ssh -i ~/.ssh/id_ed25519_ioi lino@ioi.local "cd ~/IOI && python3 run.py"
 ```
 
-## Estructura de directorios
-
-```
-~/IOI/                          (tu repo local en Mac)
-├── backend/
-├── node-red/
-├── storage/                    (local, filled by dev run)
-├── venv/                       (local Python env)
-├── config.py                   (importado por server.py)
-├── run.py
-├── requirements.txt
-├── Makefile
-├── setup.sh
-├── deploy.sh
-└── ...
-
-~pi/smartcam/                   (en Pi, después de deploy)
-├── backend/
-├── storage/                    (archivos reales capturados)
-├── venv/
-├── ...
-```
-
-## Variables de entorno (para override de config.py)
-
-En tu máquina local o Pi, puedes setear:
+### Node-RED
 
 ```bash
-# Customizar cámara
-export CAMERA_RESOLUTION=1280,720
-export CAMERA_FRAMERATE=30
-export CAMERA_JPEG_QUALITY=90
+# Estado
+ssh -i ~/.ssh/id_ed25519_ioi lino@ioi.local "sudo systemctl status nodered"
 
-# Customizar MQTT
-export MQTT_HOST=192.168.1.50   # si broker está en otra máquina
-export MQTT_PORT=1883
+# Logs
+ssh -i ~/.ssh/id_ed25519_ioi lino@ioi.local "sudo journalctl -u nodered -n 50"
 
-# Customizar Flask
-export FLASK_DEBUG=true         # recargar en cambios
-export FLASK_PORT=5001          # si 5000 está ocupado
-
-# Debug
-export LOG_LEVEL=DEBUG
-
-python3 run.py
+# Reiniciar
+ssh -i ~/.ssh/id_ed25519_ioi lino@ioi.local "sudo systemctl restart nodered"
 ```
 
-## Troubleshooting
+---
 
-### "Cannot connect to MQTT broker"
+## Acceso a la Pi
+
 ```bash
-# En local: arrancar mosquitto
-brew install mosquitto
-mosquitto -c /usr/local/etc/mosquitto/mosquitto.conf
-
-# En Pi: ya debería estar corriendo
-sudo systemctl status mosquitto
+ssh -i ~/.ssh/id_ed25519_ioi lino@ioi.local
 ```
 
-### "OpenCV ImportError"
-```bash
-# En Mac: reinstalar con caché limpio
-source venv/bin/activate
-pip install --upgrade --force-reinstall opencv-python
-```
+---
 
-### "Puerto 5000 ocupado"
-```bash
-# Ver qué está usando el puerto
-lsof -i :5000
+## Variables de entorno (override de config.py)
 
-# O cambiar puerto
+```bash
+# Resolución del stream en vivo (no afecta a las capturas)
+export CAMERA_RESOLUTION=640,480
+export CAMERA_FRAMERATE=24
+
+# Resolución de captura still (máximo sensor)
+export CAPTURE_RESOLUTION=4056,3040
+
+# Directorio de proyectos
+export PROJECTS_DIR=/home/lino/IOI/projects
+
+# Puerto Flask
 export FLASK_PORT=5001
-python3 run.py
 ```
 
-### "SSH key not configured"
-```bash
-# En tu Mac
-ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519
-ssh-copy-id -i ~/.ssh/id_ed25519 pi@192.168.1.100
-```
+---
 
-## Checklist para despliegue a producción
+## Checklist de deploy
 
-- [ ] `make test` pasa sin errores en local
-- [ ] Backend responde `curl http://localhost:5001/api/health`
-- [ ] Cambios commiteados: `git status` limpio
-- [ ] SSH funciona: `ssh pi@<IP> echo OK`
-- [ ] `make deploy PI_HOST=<IP>` completa sin errores
-- [ ] En Pi: `sudo systemctl enable smartcam` (auto-arranque)
-- [ ] Monitorear logs: `sudo journalctl -u smartcam -f`
-- [ ] Node-RED conecta: `curl http://<PI_IP>:5000/api/health` desde máquina con Node-RED
-
-## Próximas automatizaciones
-
-- [ ] Git hooks (pre-commit) para lint
-- [ ] CI/CD con GitHub Actions (test antes de desplegar)
-- [ ] Rollback automático si healthcheck falla
-- [ ] Monitoreo remoto con Prometheus
+- [ ] `curl http://ioi.local:5001/api/health` responde `running: true`
+- [ ] Node-RED accesible en `http://ioi.local:1880`
+- [ ] Stream visible en `http://ioi.local:5001/stream`
+- [ ] Flujo Node-RED desplegado y sin errores rojos

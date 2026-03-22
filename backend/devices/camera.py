@@ -24,8 +24,10 @@ class SmartCamera:
     JPEG output is only used for streaming previews — never for archival.
     """
 
-    def __init__(self, resolution=(640, 480), framerate=24, ring_size=32, use_picamera=True):
+    def __init__(self, resolution=(640, 480), framerate=24, ring_size=32, use_picamera=True,
+                 capture_resolution=(4056, 3040)):
         self.resolution = resolution
+        self.capture_resolution = capture_resolution
         self.framerate = framerate
         self.ring = deque(maxlen=ring_size)
         self.latest_frame: Optional[np.ndarray] = None
@@ -114,16 +116,27 @@ class SmartCamera:
 
     def capture_still(self, path: str = None) -> Optional[np.ndarray]:
         """
-        Capture the best available still frame as BGR numpy array.
+        Capture a full-resolution still frame as BGR numpy array.
+        Switches picamera2 to still mode (capture_resolution), captures, returns to stream.
         Saves lossless TIFF to path if provided.
         Never saves as JPEG — TIFF only for archival.
         """
-        bgr = self.get_frame()
-        if bgr is None:
-            return None
-        if path:
-            cv2.imwrite(str(path), bgr)   # OpenCV writes TIFF losslessly
-        return bgr
+        if self.source == 'picamera2' and self._cam:
+            still_cfg = self._cam.create_still_configuration(
+                main={"size": self.capture_resolution, "format": "RGB888"}
+            )
+            array = self._cam.switch_mode_and_capture_array(still_cfg, "main")
+            bgr = cv2.cvtColor(array, cv2.COLOR_RGB2BGR)
+            if path:
+                cv2.imwrite(str(path), bgr)
+            return bgr
+        else:
+            bgr = self.get_frame()
+            if bgr is None:
+                return None
+            if path:
+                cv2.imwrite(str(path), bgr)
+            return bgr
 
     # ------------------------------------------------------------------ camera controls
 

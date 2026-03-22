@@ -1,16 +1,637 @@
 [
   {
-    "id": "tab_ioi",
+    "id": "tab_dark",
     "type": "tab",
-    "label": "IOI Camera",
+    "label": "IOI / Calibration / Dark Frame",
     "disabled": false,
-    "info": "Captura un frame TIFF, genera preview JPEG, muestra en canvas."
+    "info": "Tapa el objetivo antes de capturar"
   },
 
   {
-    "id": "inject_config",
+    "id": "d_comment",
+    "type": "comment",
+    "z": "tab_dark",
+    "name": "1. Tapa el objetivo\n2. Pulsa Capture Dark\n3. El resultado se guarda en projects/<project>/calibration/dark_frame.tiff\n\nn: número de frames a promediar (default 10)\nproject_id: proyecto donde guardar",
+    "info": "",
+    "x": 500, "y": 100,
+    "wires": []
+  },
+
+  {
+    "id": "d_inject_project",
     "type": "inject",
-    "z": "tab_ioi",
+    "z": "tab_dark",
+    "name": "Set Project",
+    "props": [{"p":"payload"}],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0,
+    "payload": "calibration", "payloadType": "str",
+    "x": 150, "y": 60,
+    "wires": [["d_fn_set_project"]]
+  },
+  {
+    "id": "d_fn_set_project",
+    "type": "function",
+    "z": "tab_dark",
+    "name": "Project ID",
+    "func": "global.set('project_id', msg.payload);\nnode.status({fill:'blue', shape:'dot', text: msg.payload});\nreturn null;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 360, "y": 60,
+    "wires": [[]]
+  },
+
+  {
+    "id": "d_inject_capture",
+    "type": "inject",
+    "z": "tab_dark",
+    "name": "Capture Dark",
+    "props": [{"p":"payload"}],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0,
+    "payload": "{\"n\":10}", "payloadType": "json",
+    "x": 150, "y": 200,
+    "wires": [["d_fn_prepare"]]
+  },
+  {
+    "id": "d_fn_prepare",
+    "type": "function",
+    "z": "tab_dark",
+    "name": "Prepare",
+    "func": "var project_id = global.get('project_id') || 'calibration';\nmsg.payload = {project_id: project_id, n: msg.payload.n || 10};\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 330, "y": 200,
+    "wires": [["d_http_capture"]]
+  },
+  {
+    "id": "d_http_capture",
+    "type": "http request",
+    "z": "tab_dark",
+    "name": "POST /calibration/dark/capture",
+    "method": "POST", "ret": "obj", "paytoqs": "ignore",
+    "url": "http://localhost:5001/api/calibration/dark/capture",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 550, "y": 200,
+    "wires": [["d_fn_done"]]
+  },
+  {
+    "id": "d_fn_done",
+    "type": "function",
+    "z": "tab_dark",
+    "name": "Done",
+    "func": "if (!msg.payload.ok) {\n    node.status({fill:'red', shape:'dot', text:'error'});\n    node.error(JSON.stringify(msg.payload));\n    return null;\n}\nnode.status({fill:'green', shape:'dot', text: msg.payload.frames_averaged + ' frames averaged'});\nreturn null;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 780, "y": 200,
+    "wires": [[]]
+  },
+
+  {
+    "id": "tab_flat",
+    "type": "tab",
+    "label": "IOI / Calibration / Flat Field",
+    "disabled": false,
+    "info": "Apunta a una superficie uniformemente iluminada"
+  },
+
+  {
+    "id": "f_comment",
+    "type": "comment",
+    "z": "tab_flat",
+    "name": "1. Enciende la iluminación (Set Lighting)\n2. Apunta a papel blanco o superficie uniforme\n3. Pulsa Capture Flat\n4. El resultado se guarda en projects/<project>/calibration/flat_frame.tiff\n\nn: número de frames a promediar (default 10)",
+    "info": "",
+    "x": 500, "y": 100,
+    "wires": []
+  },
+
+  {
+    "id": "f_inject_project",
+    "type": "inject",
+    "z": "tab_flat",
+    "name": "Set Project",
+    "props": [{"p":"payload"}],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0,
+    "payload": "calibration", "payloadType": "str",
+    "x": 150, "y": 60,
+    "wires": [["f_fn_set_project"]]
+  },
+  {
+    "id": "f_fn_set_project",
+    "type": "function",
+    "z": "tab_flat",
+    "name": "Project ID",
+    "func": "global.set('project_id', msg.payload);\nnode.status({fill:'blue', shape:'dot', text: msg.payload});\nreturn null;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 360, "y": 60,
+    "wires": [[]]
+  },
+
+  {
+    "id": "f_inject_capture",
+    "type": "inject",
+    "z": "tab_flat",
+    "name": "Capture Flat",
+    "props": [{"p":"payload"}],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0,
+    "payload": "{\"n\":10}", "payloadType": "json",
+    "x": 150, "y": 200,
+    "wires": [["f_fn_light_on"]]
+  },
+  {
+    "id": "f_fn_light_on",
+    "type": "function",
+    "z": "tab_flat",
+    "name": "Prepare ON",
+    "func": "msg._n = msg.payload.n || 10;\nmsg.payload = {group: 'visible', intensity: 100};\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 330, "y": 200,
+    "wires": [["f_http_light_on"]]
+  },
+  {
+    "id": "f_http_light_on",
+    "type": "http request",
+    "z": "tab_flat",
+    "name": "POST /lighting/on",
+    "method": "POST", "ret": "obj", "paytoqs": "ignore",
+    "url": "http://localhost:5001/api/lighting/on",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 510, "y": 200,
+    "wires": [["f_fn_warmup"]]
+  },
+  {
+    "id": "f_fn_warmup",
+    "type": "function",
+    "z": "tab_flat",
+    "name": "Warmup",
+    "func": "return new Promise(resolve => setTimeout(() => resolve(msg), 500));",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 690, "y": 200,
+    "wires": [["f_fn_prepare"]]
+  },
+  {
+    "id": "f_fn_prepare",
+    "type": "function",
+    "z": "tab_flat",
+    "name": "Prepare Capture",
+    "func": "var project_id = global.get('project_id') || 'calibration';\nmsg.payload = {project_id: project_id, n: msg._n || 10};\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 880, "y": 200,
+    "wires": [["f_http_capture"]]
+  },
+  {
+    "id": "f_http_capture",
+    "type": "http request",
+    "z": "tab_flat",
+    "name": "POST /calibration/flat/capture",
+    "method": "POST", "ret": "obj", "paytoqs": "ignore",
+    "url": "http://localhost:5001/api/calibration/flat/capture",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 150, "y": 340,
+    "wires": [["f_fn_light_off"]]
+  },
+  {
+    "id": "f_fn_light_off",
+    "type": "function",
+    "z": "tab_flat",
+    "name": "Prepare OFF",
+    "func": "msg._result = msg.payload;\nmsg.payload = {group: 'visible'};\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 360, "y": 340,
+    "wires": [["f_http_light_off"]]
+  },
+  {
+    "id": "f_http_light_off",
+    "type": "http request",
+    "z": "tab_flat",
+    "name": "POST /lighting/off",
+    "method": "POST", "ret": "obj", "paytoqs": "ignore",
+    "url": "http://localhost:5001/api/lighting/off",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 540, "y": 340,
+    "wires": [["f_fn_done"]]
+  },
+  {
+    "id": "f_fn_done",
+    "type": "function",
+    "z": "tab_flat",
+    "name": "Done",
+    "func": "var result = msg._result;\nif (!result || !result.ok) {\n    node.status({fill:'red', shape:'dot', text:'error'});\n    node.error(JSON.stringify(result));\n    return null;\n}\nnode.status({fill:'green', shape:'dot', text: result.frames_averaged + ' frames averaged'});\nreturn null;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 730, "y": 340,
+    "wires": [[]]
+  },
+
+  {
+    "id": "tab_apply_cal",
+    "type": "tab",
+    "label": "IOI / Calibration / Apply",
+    "disabled": false,
+    "info": "Aplica dark frame y flat field a una imagen capturada"
+  },
+
+  {
+    "id": "ac_comment",
+    "type": "comment",
+    "z": "tab_apply_cal",
+    "name": "image_path: ruta absoluta del TIFF a corregir\nproject_id: proyecto donde están los archivos de calibración\n(dark_frame.tiff y flat_frame.tiff deben existir en projects/<project_id>/calibration/)\nEl resultado se guarda en projects/<project_id>/corrected/",
+    "info": "",
+    "x": 560, "y": 100,
+    "wires": []
+  },
+
+  {
+    "id": "ac_inject",
+    "type": "inject",
+    "z": "tab_apply_cal",
+    "name": "Apply Calibration",
+    "props": [{"p":"payload"}],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0,
+    "payload": "{\"image_path\":\"/home/lino/IOI/projects/unsorted/raw/frame_xxxxxxxx.tiff\",\"project_id\":\"unsorted\",\"calibration_id\":\"calibration\"}",
+    "payloadType": "json",
+    "x": 150, "y": 200,
+    "wires": [["ac_fn_split"]]
+  },
+
+  {
+    "id": "ac_fn_split",
+    "type": "function",
+    "z": "tab_apply_cal",
+    "name": "Split",
+    "func": "var image_path = msg.payload.image_path;\nvar project_id = msg.payload.project_id;\nvar cal_id = msg.payload.calibration_id || 'calibration';\nvar cal_base = '/home/lino/IOI/projects/' + cal_id + '/calibration/';\n\nvar orig = {\n    payload: {image_path: image_path, max_size: 800, quality: 90},\n    headers: {'Content-Type': 'application/json'}\n};\n\nvar cal = {\n    _project_id: project_id,\n    _cal_base: cal_base,\n    payload: {\n        input_path: image_path,\n        dark_path: cal_base + 'dark_frame.tiff',\n        output_dir: '/home/lino/IOI/projects/' + project_id + '/corrected'\n    },\n    headers: {'Content-Type': 'application/json'}\n};\n\nreturn [orig, cal];",
+    "outputs": 2, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 370, "y": 200,
+    "wires": [["ac_http_preview_orig"], ["ac_http_dark"]]
+  },
+
+  {
+    "id": "ac_http_preview_orig",
+    "type": "http request",
+    "z": "tab_apply_cal",
+    "name": "POST /blocks/preview (original)",
+    "method": "POST", "ret": "obj", "paytoqs": "ignore",
+    "url": "http://localhost:5001/api/blocks/preview",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 620, "y": 120,
+    "wires": [["ac_fn_extract_url_orig"]]
+  },
+  {
+    "id": "ac_fn_extract_url_orig",
+    "type": "function",
+    "z": "tab_apply_cal",
+    "name": "Extract URL",
+    "func": "if (!msg.payload.ok) return null;\nmsg.url = 'http://localhost:5001' + msg.payload.http_path;\nmsg.headers = {};\nreturn msg;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 860, "y": 120,
+    "wires": [["ac_http_fetch_orig"]]
+  },
+  {
+    "id": "ac_http_fetch_orig",
+    "type": "http request",
+    "z": "tab_apply_cal",
+    "name": "GET image",
+    "method": "GET", "ret": "bin", "paytoqs": "ignore", "url": "",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 1040, "y": 120,
+    "wires": [["ac_image_original"]]
+  },
+  {
+    "id": "ac_image_original",
+    "type": "image",
+    "z": "tab_apply_cal",
+    "name": "Original",
+    "width": "400",
+    "data": "payload", "dataType": "msg",
+    "thumbnail": false, "active": true, "pass": false, "outputs": 0,
+    "x": 1210, "y": 120,
+    "wires": []
+  },
+
+  {
+    "id": "ac_http_dark",
+    "type": "http request",
+    "z": "tab_apply_cal",
+    "name": "POST /blocks/calibration/dark",
+    "method": "POST", "ret": "obj", "paytoqs": "ignore",
+    "url": "http://localhost:5001/api/blocks/calibration/dark",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 590, "y": 200,
+    "wires": [["ac_fn_prepare_flat"]]
+  },
+
+  {
+    "id": "ac_fn_prepare_flat",
+    "type": "function",
+    "z": "tab_apply_cal",
+    "name": "Prepare Flat",
+    "func": "if (!msg.payload.ok) {\n    node.status({fill:'red', shape:'dot', text:'dark error'});\n    node.error(JSON.stringify(msg.payload));\n    return null;\n}\nvar cal_base = msg._cal_base;\nmsg.payload = {\n    input_path: msg.payload.output_path,\n    flat_path: cal_base + 'flat_frame.tiff',\n    dark_path: cal_base + 'dark_frame.tiff',\n    output_dir: '/home/lino/IOI/projects/' + msg._project_id + '/corrected'\n};\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 820, "y": 200,
+    "wires": [["ac_http_flat"]]
+  },
+  {
+    "id": "ac_http_flat",
+    "type": "http request",
+    "z": "tab_apply_cal",
+    "name": "POST /blocks/calibration/flat",
+    "method": "POST", "ret": "obj", "paytoqs": "ignore",
+    "url": "http://localhost:5001/api/blocks/calibration/flat",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 150, "y": 340,
+    "wires": [["ac_fn_prepare_preview"]]
+  },
+
+  {
+    "id": "ac_fn_prepare_preview",
+    "type": "function",
+    "z": "tab_apply_cal",
+    "name": "Prepare Preview",
+    "func": "if (!msg.payload.ok) {\n    node.status({fill:'red', shape:'dot', text:'flat error'});\n    node.error(JSON.stringify(msg.payload));\n    return null;\n}\nnode.status({fill:'green', shape:'dot', text:'calibration ok'});\nvar full_res = global.get('preview_full_res') || false;\nmsg.payload = {\n    image_path: msg.payload.output_path,\n    full_res: full_res,\n    max_size: 800,\n    quality: 90\n};\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 370, "y": 340,
+    "wires": [["ac_http_preview"]]
+  },
+  {
+    "id": "ac_http_preview",
+    "type": "http request",
+    "z": "tab_apply_cal",
+    "name": "POST /blocks/preview",
+    "method": "POST", "ret": "obj", "paytoqs": "ignore",
+    "url": "http://localhost:5001/api/blocks/preview",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 570, "y": 340,
+    "wires": [["ac_fn_extract_url"]]
+  },
+  {
+    "id": "ac_fn_extract_url",
+    "type": "function",
+    "z": "tab_apply_cal",
+    "name": "Extract URL",
+    "func": "var result = msg.payload;\nif (!result || !result.ok || !result.http_path) {\n    node.error('Preview failed: ' + JSON.stringify(result));\n    return null;\n}\nmsg.url = 'http://localhost:5001' + result.http_path;\nmsg.headers = {};\nreturn msg;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 760, "y": 340,
+    "wires": [["ac_http_fetch"]]
+  },
+  {
+    "id": "ac_http_fetch",
+    "type": "http request",
+    "z": "tab_apply_cal",
+    "name": "GET image",
+    "method": "GET", "ret": "bin", "paytoqs": "ignore", "url": "",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 930, "y": 340,
+    "wires": [["ac_image_preview"]]
+  },
+  {
+    "id": "ac_image_preview",
+    "type": "image",
+    "z": "tab_apply_cal",
+    "name": "Preview",
+    "width": "400",
+    "data": "payload", "dataType": "msg",
+    "thumbnail": false, "active": true, "pass": false, "outputs": 0,
+    "x": 1090, "y": 340,
+    "wires": []
+  },
+
+  {
+    "id": "tab_project",
+    "type": "tab",
+    "label": "IOI / Project",
+    "disabled": false,
+    "info": "Gestión de proyectos: crear, activar, limpiar"
+  },
+
+  {
+    "id": "pj_comment",
+    "type": "comment",
+    "z": "tab_project",
+    "name": "New Project: crea estructura de directorios y lo activa\nSet Project: cambia el proyecto activo sin crear\nClean Project: borra archivos (raw, corrected, thumbnails) pero mantiene la estructura\n\nEl proyecto activo se usa en todos los flujos de captura y calibración",
+    "info": "",
+    "x": 500, "y": 80,
+    "wires": []
+  },
+
+  {
+    "id": "pj_inject_new",
+    "type": "inject",
+    "z": "tab_project",
+    "name": "New Project",
+    "props": [{"p":"payload"}],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0,
+    "payload": "{\"name\":\"project_001\"}",
+    "payloadType": "json",
+    "x": 150, "y": 180,
+    "wires": [["pj_fn_new"]]
+  },
+  {
+    "id": "pj_fn_new",
+    "type": "function",
+    "z": "tab_project",
+    "name": "Prepare New",
+    "func": "msg.payload = {name: msg.payload.name};\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 340, "y": 180,
+    "wires": [["pj_http_new"]]
+  },
+  {
+    "id": "pj_http_new",
+    "type": "http request",
+    "z": "tab_project",
+    "name": "POST /project/create",
+    "method": "POST", "ret": "obj", "paytoqs": "ignore",
+    "url": "http://localhost:5001/api/project/create",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 530, "y": 180,
+    "wires": [["pj_fn_new_done"]]
+  },
+  {
+    "id": "pj_fn_new_done",
+    "type": "function",
+    "z": "tab_project",
+    "name": "Activate",
+    "func": "if (!msg.payload.ok) {\n    node.status({fill:'red', shape:'dot', text:'error'});\n    node.error(JSON.stringify(msg.payload));\n    return null;\n}\nvar id = msg.payload.project.project_id;\nglobal.set('project_id', id);\nnode.status({fill:'green', shape:'dot', text: id});\nreturn null;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 730, "y": 180,
+    "wires": [[]]
+  },
+
+  {
+    "id": "pj_inject_set",
+    "type": "inject",
+    "z": "tab_project",
+    "name": "Set Project",
+    "props": [{"p":"payload"}],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0,
+    "payload": "project_001",
+    "payloadType": "str",
+    "x": 150, "y": 280,
+    "wires": [["pj_fn_set"]]
+  },
+  {
+    "id": "pj_fn_set",
+    "type": "function",
+    "z": "tab_project",
+    "name": "Set Active",
+    "func": "global.set('project_id', msg.payload);\nnode.status({fill:'blue', shape:'dot', text: msg.payload});\nreturn null;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 360, "y": 280,
+    "wires": [[]]
+  },
+
+  {
+    "id": "pj_inject_clean",
+    "type": "inject",
+    "z": "tab_project",
+    "name": "Clean Project",
+    "props": [{"p":"payload"}],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0,
+    "payload": "{}",
+    "payloadType": "json",
+    "x": 150, "y": 380,
+    "wires": [["pj_fn_clean"]]
+  },
+  {
+    "id": "pj_fn_clean",
+    "type": "function",
+    "z": "tab_project",
+    "name": "Prepare Clean",
+    "func": "var project_id = global.get('project_id');\nif (!project_id) {\n    node.error('No active project set');\n    return null;\n}\nmsg.url = 'http://localhost:5001/api/project/' + project_id + '/clean';\nmsg.payload = {};\nmsg.headers = {'Content-Type': 'application/json'};\nnode.status({fill:'yellow', shape:'dot', text: 'cleaning ' + project_id});\nreturn msg;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 360, "y": 380,
+    "wires": [["pj_http_clean"]]
+  },
+  {
+    "id": "pj_http_clean",
+    "type": "http request",
+    "z": "tab_project",
+    "name": "POST /project/clean",
+    "method": "POST", "ret": "obj", "paytoqs": "ignore",
+    "url": "",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 560, "y": 380,
+    "wires": [["pj_fn_clean_done"]]
+  },
+  {
+    "id": "pj_fn_clean_done",
+    "type": "function",
+    "z": "tab_project",
+    "name": "Done",
+    "func": "if (!msg.payload.ok) {\n    node.status({fill:'red', shape:'dot', text:'error'});\n    node.error(JSON.stringify(msg.payload));\n    return null;\n}\nnode.status({fill:'green', shape:'dot', text: 'cleaned: ' + msg.payload.cleaned.join(', ')});\nreturn null;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 750, "y": 380,
+    "wires": [[]]
+  },
+
+  {
+    "id": "tab_settings",
+    "type": "tab",
+    "label": "IOI / Settings",
+    "disabled": false,
+    "info": "Parámetros de cámara: exposición, gain, balance de blancos, resolución"
+  },
+
+  {
+    "id": "s_comment",
+    "type": "comment",
+    "z": "tab_settings",
+    "name": "exposure_auto: true/false\nexposure_us: 100–10000000 (µs)\ngain_auto: true/false\ngain: 1.0–16.0\nev: -8.0–8.0 (EV compensation, con exposure_auto=true)\nwb_auto: true/false\nwb_r / wb_b: 0.1–8.0\nawb_mode: Auto|Tungsten|Fluorescent|Indoor|Daylight|Cloudy\nmetering_mode: CentreWeighted|Spot|Matrix\nnoise_reduction: Off|Fast|HighQuality\nresolution: [640,480] [1920,1080] [2592,1944]\nframerate: 1–90",
+    "info": "",
+    "x": 500, "y": 120,
+    "wires": []
+  },
+
+  {
+    "id": "s_inject_settings",
+    "type": "inject",
+    "z": "tab_settings",
+    "name": "Camera Settings",
+    "props": [{"p":"payload"}],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0,
+    "topic": "",
+    "payload": "{\"exposure_auto\":true,\"exposure_us\":20000,\"gain_auto\":true,\"gain\":2.0,\"ev\":0.0,\"wb_auto\":true,\"wb_r\":1.5,\"wb_b\":1.8,\"awb_mode\":\"Auto\",\"metering_mode\":\"Matrix\",\"noise_reduction\":\"HighQuality\",\"resolution\":[640,480],\"framerate\":24}",
+    "payloadType": "json",
+    "x": 150, "y": 200,
+    "wires": [["s_fn_translate"]]
+  },
+
+  {
+    "id": "s_fn_translate",
+    "type": "function",
+    "z": "tab_settings",
+    "name": "Translate",
+    "func": "var p = msg.payload;\n\n// Camera controls\nvar controls = {};\n\n// Exposure\ncontrols.AeEnable = p.exposure_auto !== false;\nif (!controls.AeEnable) {\n    controls.ExposureTime = parseInt(p.exposure_us) || 20000;\n}\n\n// Gain (independent from AE — fix: don't override AeEnable)\nif (p.gain_auto === false) {\n    controls.AnalogueGain = parseFloat(p.gain) || 1.0;\n}\n\n// EV compensation (useful with AeEnable=true)\nif (p.ev !== undefined && p.ev !== null) {\n    controls.ExposureValue = parseFloat(p.ev) || 0.0;\n}\n\n// White balance\ncontrols.AwbEnable = p.wb_auto !== false;\nif (!controls.AwbEnable) {\n    controls.ColourGains = [parseFloat(p.wb_r) || 1.5, parseFloat(p.wb_b) || 1.8];\n}\n\n// AWB mode preset\nvar awbModes = {Auto:0, Tungsten:1, Fluorescent:2, Indoor:3, Daylight:4, Cloudy:5, Custom:6};\nif (p.awb_mode && awbModes[p.awb_mode] !== undefined) {\n    controls.AwbMode = awbModes[p.awb_mode];\n}\n\n// Metering mode\nvar meteringModes = {CentreWeighted:0, Spot:1, Matrix:2, Custom:3};\nif (p.metering_mode && meteringModes[p.metering_mode] !== undefined) {\n    controls.AeMeteringMode = meteringModes[p.metering_mode];\n}\n\n// Noise reduction (Off recommended for scientific imaging)\nvar nrModes = {Off:0, Fast:1, HighQuality:2};\nif (p.noise_reduction && nrModes[p.noise_reduction] !== undefined) {\n    controls.NoiseReductionMode = nrModes[p.noise_reduction];\n}\n\n// Camera settings (resolution/framerate)\nvar settings = {};\nif (p.resolution) settings.resolution = p.resolution;\nif (p.framerate) settings.framerate = p.framerate;\n\nmsg.controls = controls;\nmsg.settings = settings;\nmsg.payload = controls;\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "", "finalize": "", "libs": [],
+    "x": 350, "y": 200,
+    "wires": [["s_http_controls"]]
+  },
+
+  {
+    "id": "s_http_controls",
+    "type": "http request",
+    "z": "tab_settings",
+    "name": "POST /capture/controls",
+    "method": "POST",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "http://localhost:5001/api/capture/controls",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 560, "y": 200,
+    "wires": [["s_fn_prepare_settings"]]
+  },
+
+  {
+    "id": "s_fn_prepare_settings",
+    "type": "function",
+    "z": "tab_settings",
+    "name": "Prepare settings",
+    "func": "node.status({fill:'green', shape:'dot', text:'controls ok'});\nmsg.payload = msg.settings;\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "", "finalize": "", "libs": [],
+    "x": 780, "y": 200,
+    "wires": [["s_http_settings"]]
+  },
+
+  {
+    "id": "s_http_settings",
+    "type": "http request",
+    "z": "tab_settings",
+    "name": "POST /capture/settings",
+    "method": "POST",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "http://localhost:5001/api/capture/settings",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 990, "y": 200,
+    "wires": [["s_fn_done"]]
+  },
+
+  {
+    "id": "s_fn_done",
+    "type": "function",
+    "z": "tab_settings",
+    "name": "Done",
+    "func": "node.status({fill:'green', shape:'dot', text:'settings ok'});\nreturn null;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "", "finalize": "", "libs": [],
+    "x": 1180, "y": 200,
+    "wires": [[]]
+  },
+
+  {
+    "id": "tab_capture",
+    "type": "tab",
+    "label": "IOI / Capture",
+    "disabled": false,
+    "info": "Captura simple sin iluminación"
+  },
+
+  {
+    "id": "c_inject_config",
+    "type": "inject",
+    "z": "tab_capture",
     "name": "Config (on deploy)",
     "props": [{"p":"payload"}],
     "repeat": "",
@@ -21,14 +642,14 @@
     "payload": "",
     "payloadType": "date",
     "x": 150, "y": 60,
-    "wires": [["fn_set_config"]]
+    "wires": [["c_fn_set_config"]]
   },
   {
-    "id": "fn_set_config",
+    "id": "c_fn_set_config",
     "type": "function",
-    "z": "tab_ioi",
+    "z": "tab_capture",
     "name": "Backend URL",
-    "func": "global.set('backend_url', 'http://192.168.0.39:5001');\nnode.status({fill:'green', shape:'dot', text:'ok'});\nreturn null;",
+    "func": "global.set('backend_url', 'http://localhost:5001');\nnode.status({fill:'green', shape:'dot', text:'ok'});\nreturn null;",
     "outputs": 1,
     "noerr": 0,
     "initialize": "", "finalize": "", "libs": [],
@@ -37,9 +658,38 @@
   },
 
   {
-    "id": "inject_capture",
+    "id": "c_inject_project",
     "type": "inject",
-    "z": "tab_ioi",
+    "z": "tab_capture",
+    "name": "Set Project",
+    "props": [{"p":"payload"}],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0,
+    "topic": "",
+    "payload": "unsorted",
+    "payloadType": "str",
+    "x": 150, "y": 130,
+    "wires": [["c_fn_set_project"]]
+  },
+  {
+    "id": "c_fn_set_project",
+    "type": "function",
+    "z": "tab_capture",
+    "name": "Project ID",
+    "func": "global.set('project_id', msg.payload);\nnode.status({fill:'blue', shape:'dot', text: msg.payload});\nreturn null;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "", "finalize": "", "libs": [],
+    "x": 360, "y": 130,
+    "wires": [[]]
+  },
+
+  {
+    "id": "c_inject_capture",
+    "type": "inject",
+    "z": "tab_capture",
     "name": "Capture Frame",
     "props": [{"p":"payload"}],
     "repeat": "",
@@ -49,127 +699,404 @@
     "topic": "",
     "payload": "{}",
     "payloadType": "json",
-    "x": 150, "y": 180,
-    "wires": [["fn_capture_request"]]
+    "x": 150, "y": 230,
+    "wires": [["c_fn_capture_request"]]
   },
   {
-    "id": "fn_capture_request",
+    "id": "c_fn_capture_request",
     "type": "function",
-    "z": "tab_ioi",
+    "z": "tab_capture",
     "name": "Prepare",
-    "func": "msg.payload = {};\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+    "func": "var project_id = global.get('project_id') || 'unsorted';\nmsg.payload = {project_id: project_id};\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
     "outputs": 1,
     "noerr": 0,
     "initialize": "", "finalize": "", "libs": [],
-    "x": 330, "y": 180,
-    "wires": [["http_capture"]]
+    "x": 330, "y": 230,
+    "wires": [["c_http_capture"]]
   },
   {
-    "id": "http_capture",
+    "id": "c_http_capture",
     "type": "http request",
-    "z": "tab_ioi",
-    "name": "POST /api/capture/frame",
+    "z": "tab_capture",
+    "name": "POST /capture/frame",
     "method": "POST",
     "ret": "obj",
     "paytoqs": "ignore",
     "url": "http://localhost:5001/api/capture/frame",
     "tls": "", "persist": false, "proxy": "", "authType": "",
-    "x": 520, "y": 180,
-    "wires": [["fn_prepare_preview", "debug_capture"]]
+    "x": 510, "y": 230,
+    "wires": [["c_fn_prepare_preview"]]
   },
   {
-    "id": "debug_capture",
-    "type": "debug",
-    "z": "tab_ioi",
-    "name": "capture",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": true,
-    "complete": "payload.frame.frame_id",
-    "targetType": "msg",
-    "x": 520, "y": 240,
-    "wires": []
-  },
-
-  {
-    "id": "fn_prepare_preview",
+    "id": "c_fn_prepare_preview",
     "type": "function",
-    "z": "tab_ioi",
-    "name": "Prepare preview",
-    "func": "var result = msg.payload;\nif (!result || !result.ok || !result.frame) {\n    node.error('Capture failed: ' + JSON.stringify(result));\n    node.status({fill:'red', shape:'dot', text:'error'});\n    return null;\n}\nnode.status({fill:'green', shape:'dot', text: result.frame.frame_id});\nmsg.payload = {\n    image_path: result.frame.image_path,\n    max_size: 800,\n    quality: 90\n};\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+    "z": "tab_capture",
+    "name": "Prepare Preview",
+    "func": "var result = msg.payload;\nif (!result || !result.ok || !result.frame) {\n    node.error('Capture failed: ' + JSON.stringify(result));\n    node.status({fill:'red', shape:'dot', text:'error'});\n    return null;\n}\nnode.status({fill:'green', shape:'dot', text: result.frame.frame_id});\nvar full_res = global.get('preview_full_res') || false;\nmsg.payload = {\n    image_path: result.frame.image_path,\n    full_res: full_res,\n    max_size: 800,\n    quality: 90\n};\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
     "outputs": 1,
     "noerr": 0,
     "initialize": "", "finalize": "", "libs": [],
-    "x": 740, "y": 180,
-    "wires": [["http_preview"]]
+    "x": 150, "y": 370,
+    "wires": [["c_http_preview"]]
   },
   {
-    "id": "http_preview",
+    "id": "c_http_preview",
     "type": "http request",
-    "z": "tab_ioi",
-    "name": "POST /api/blocks/preview",
+    "z": "tab_capture",
+    "name": "POST /blocks/preview",
     "method": "POST",
     "ret": "obj",
     "paytoqs": "ignore",
     "url": "http://localhost:5001/api/blocks/preview",
     "tls": "", "persist": false, "proxy": "", "authType": "",
-    "x": 960, "y": 180,
-    "wires": [["fn_fetch_image", "debug_preview"]]
+    "x": 360, "y": 370,
+    "wires": [["c_fn_extract_url"]]
   },
   {
-    "id": "debug_preview",
-    "type": "debug",
-    "z": "tab_ioi",
-    "name": "preview",
-    "active": true,
-    "tosidebar": true,
-    "console": false,
-    "tostatus": true,
-    "complete": "payload.http_path",
-    "targetType": "msg",
-    "x": 960, "y": 240,
-    "wires": []
-  },
-
-  {
-    "id": "fn_fetch_image",
+    "id": "c_fn_extract_url",
     "type": "function",
-    "z": "tab_ioi",
-    "name": "Build fetch URL",
-    "func": "var result = msg.payload;\nif (!result || !result.ok || !result.http_path) {\n    node.error('Preview failed: ' + JSON.stringify(result));\n    node.status({fill:'red', shape:'dot', text:'error'});\n    return null;\n}\nnode.status({fill:'green', shape:'dot', text:'fetching'});\nmsg.url = 'http://localhost:5001' + result.http_path;\nreturn msg;",
+    "z": "tab_capture",
+    "name": "Extract URL",
+    "func": "var result = msg.payload;\nif (!result || !result.ok || !result.http_path) {\n    node.error('Preview failed: ' + JSON.stringify(result));\n    node.status({fill:'red', shape:'dot', text:'error'});\n    return null;\n}\nnode.status({fill:'green', shape:'dot', text: result.http_path});\nmsg.url = 'http://localhost:5001' + result.http_path;\nmsg.headers = {};\nreturn msg;",
     "outputs": 1,
     "noerr": 0,
     "initialize": "", "finalize": "", "libs": [],
-    "x": 1170, "y": 180,
-    "wires": [["http_get_image"]]
+    "x": 560, "y": 370,
+    "wires": [["c_http_fetch_image"]]
   },
   {
-    "id": "http_get_image",
+    "id": "c_http_fetch_image",
     "type": "http request",
-    "z": "tab_ioi",
-    "name": "GET preview (binary)",
+    "z": "tab_capture",
+    "name": "GET image",
     "method": "GET",
     "ret": "bin",
     "paytoqs": "ignore",
-    "url": "{{{msg.url}}}",
+    "url": "",
     "tls": "", "persist": false, "proxy": "", "authType": "",
-    "x": 1380, "y": 180,
-    "wires": [["image_output"]]
+    "x": 740, "y": 370,
+    "wires": [["c_node_image_preview"]]
   },
   {
-    "id": "image_output",
+    "id": "c_node_image_preview",
     "type": "image",
-    "z": "tab_ioi",
+    "z": "tab_capture",
     "name": "Preview",
-    "width": "320",
+    "width": "400",
     "data": "payload",
     "dataType": "msg",
     "thumbnail": false,
     "active": true,
     "pass": false,
     "outputs": 0,
-    "x": 1580, "y": 180,
+    "x": 900, "y": 370,
+    "wires": []
+  },
+
+  {
+    "id": "tab_lighting",
+    "type": "tab",
+    "label": "IOI / Capture + Lighting",
+    "disabled": false,
+    "info": "Captura con iluminación controlada"
+  },
+
+  {
+    "id": "l_inject_config",
+    "type": "inject",
+    "z": "tab_lighting",
+    "name": "Config (on deploy)",
+    "props": [{"p":"payload"}],
+    "repeat": "",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150, "y": 60,
+    "wires": [["l_fn_set_config"]]
+  },
+  {
+    "id": "l_inject_preview_thumb",
+    "type": "inject",
+    "z": "tab_lighting",
+    "name": "Thumbnail (800px)",
+    "props": [{"p":"payload"}],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0,
+    "payload": "false", "payloadType": "bool",
+    "x": 600, "y": 60,
+    "wires": [["l_fn_preview_mode"]]
+  },
+  {
+    "id": "l_inject_preview_full",
+    "type": "inject",
+    "z": "tab_lighting",
+    "name": "Full Resolution",
+    "props": [{"p":"payload"}],
+    "repeat": "", "crontab": "", "once": false, "onceDelay": 0,
+    "payload": "true", "payloadType": "bool",
+    "x": 600, "y": 100,
+    "wires": [["l_fn_preview_mode"]]
+  },
+  {
+    "id": "l_fn_preview_mode",
+    "type": "function",
+    "z": "tab_lighting",
+    "name": "Preview Mode",
+    "func": "global.set('preview_full_res', msg.payload === true);\nvar mode = msg.payload ? 'full resolution' : 'thumbnail';\nnode.status({fill: msg.payload ? 'blue' : 'green', shape:'dot', text: mode});\nreturn null;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "", "libs": [],
+    "x": 830, "y": 80,
+    "wires": [[]]
+  },
+
+  {
+    "id": "l_fn_set_config",
+    "type": "function",
+    "z": "tab_lighting",
+    "name": "Backend URL",
+    "func": "global.set('backend_url', 'http://localhost:5001');\nnode.status({fill:'green', shape:'dot', text:'ok'});\nreturn null;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "", "finalize": "", "libs": [],
+    "x": 370, "y": 60,
+    "wires": [[]]
+  },
+
+  {
+    "id": "l_inject_project",
+    "type": "inject",
+    "z": "tab_lighting",
+    "name": "Set Project",
+    "props": [{"p":"payload"}],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0,
+    "topic": "",
+    "payload": "unsorted",
+    "payloadType": "str",
+    "x": 150, "y": 130,
+    "wires": [["l_fn_set_project"]]
+  },
+  {
+    "id": "l_fn_set_project",
+    "type": "function",
+    "z": "tab_lighting",
+    "name": "Project ID",
+    "func": "global.set('project_id', msg.payload);\nnode.status({fill:'blue', shape:'dot', text: msg.payload});\nreturn null;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "", "finalize": "", "libs": [],
+    "x": 360, "y": 130,
+    "wires": [[]]
+  },
+
+  {
+    "id": "l_comment_lighting",
+    "type": "comment",
+    "z": "tab_lighting",
+    "name": "group: visible | polarized | ir | uv | all\nintensity: 0–100 (%)\nwarmup_ms: 0–2000 (ms)",
+    "info": "",
+    "x": 600, "y": 200,
+    "wires": []
+  },
+
+  {
+    "id": "l_inject_lighting",
+    "type": "inject",
+    "z": "tab_lighting",
+    "name": "Set Lighting",
+    "props": [{"p":"payload"}],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0,
+    "topic": "",
+    "payload": "{\"group\":\"visible\",\"intensity\":80,\"warmup_ms\":200}",
+    "payloadType": "json",
+    "x": 150, "y": 200,
+    "wires": [["l_fn_set_lighting"]]
+  },
+  {
+    "id": "l_fn_set_lighting",
+    "type": "function",
+    "z": "tab_lighting",
+    "name": "Lighting Config",
+    "func": "global.set('lighting', msg.payload);\nnode.status({fill:'yellow', shape:'dot', text: msg.payload.group + ' ' + msg.payload.intensity + '%'});\nreturn null;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "", "finalize": "", "libs": [],
+    "x": 370, "y": 200,
+    "wires": [[]]
+  },
+
+  {
+    "id": "l_inject_capture",
+    "type": "inject",
+    "z": "tab_lighting",
+    "name": "Capture Frame",
+    "props": [{"p":"payload"}],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0,
+    "topic": "",
+    "payload": "{}",
+    "payloadType": "json",
+    "x": 150, "y": 310,
+    "wires": [["l_fn_light_on"]]
+  },
+  {
+    "id": "l_fn_light_on",
+    "type": "function",
+    "z": "tab_lighting",
+    "name": "Prepare ON",
+    "func": "var cfg = global.get('lighting') || {group:'all', intensity:100, warmup_ms:200};\nmsg.payload = {group: cfg.group, intensity: cfg.intensity};\nmsg.headers = {'Content-Type': 'application/json'};\nmsg._warmup = cfg.warmup_ms || 0;\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "", "finalize": "", "libs": [],
+    "x": 330, "y": 310,
+    "wires": [["l_http_light_on"]]
+  },
+  {
+    "id": "l_http_light_on",
+    "type": "http request",
+    "z": "tab_lighting",
+    "name": "POST /api/lighting/on",
+    "method": "POST",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "http://localhost:5001/api/lighting/on",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 530, "y": 310,
+    "wires": [["l_delay_warmup"]]
+  },
+  {
+    "id": "l_delay_warmup",
+    "type": "function",
+    "z": "tab_lighting",
+    "name": "Warmup",
+    "func": "var ms = msg._warmup || 0;\nif (ms <= 0) return msg;\nreturn new Promise(resolve => setTimeout(() => resolve(msg), ms));",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "", "finalize": "", "libs": [],
+    "x": 720, "y": 310,
+    "wires": [["l_fn_capture_request"]]
+  },
+  {
+    "id": "l_fn_capture_request",
+    "type": "function",
+    "z": "tab_lighting",
+    "name": "Prepare Capture",
+    "func": "var project_id = global.get('project_id') || 'unsorted';\nmsg.payload = {project_id: project_id};\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "", "finalize": "", "libs": [],
+    "x": 920, "y": 310,
+    "wires": [["l_http_capture"]]
+  },
+  {
+    "id": "l_http_capture",
+    "type": "http request",
+    "z": "tab_lighting",
+    "name": "POST /capture/frame",
+    "method": "POST",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "http://localhost:5001/api/capture/frame",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 1110, "y": 310,
+    "wires": [["l_fn_light_off"]]
+  },
+  {
+    "id": "l_fn_light_off",
+    "type": "function",
+    "z": "tab_lighting",
+    "name": "Prepare OFF",
+    "func": "var cfg = global.get('lighting') || {group:'all'};\nmsg._capture = msg.payload;\nmsg.payload = {group: cfg.group};\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "", "finalize": "", "libs": [],
+    "x": 150, "y": 460,
+    "wires": [["l_http_light_off"]]
+  },
+  {
+    "id": "l_http_light_off",
+    "type": "http request",
+    "z": "tab_lighting",
+    "name": "POST /api/lighting/off",
+    "method": "POST",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "http://localhost:5001/api/lighting/off",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 360, "y": 460,
+    "wires": [["l_fn_prepare_preview"]]
+  },
+  {
+    "id": "l_fn_prepare_preview",
+    "type": "function",
+    "z": "tab_lighting",
+    "name": "Prepare Preview",
+    "func": "var result = msg._capture;\nif (!result || !result.ok || !result.frame) {\n    node.error('Capture failed: ' + JSON.stringify(result));\n    node.status({fill:'red', shape:'dot', text:'error'});\n    return null;\n}\nnode.status({fill:'green', shape:'dot', text: result.frame.frame_id});\nvar full_res = global.get('preview_full_res') || false;\nmsg.payload = {\n    image_path: result.frame.image_path,\n    full_res: full_res,\n    max_size: 800,\n    quality: 90\n};\nmsg.headers = {'Content-Type': 'application/json'};\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "", "finalize": "", "libs": [],
+    "x": 580, "y": 460,
+    "wires": [["l_http_preview"]]
+  },
+  {
+    "id": "l_http_preview",
+    "type": "http request",
+    "z": "tab_lighting",
+    "name": "POST /blocks/preview",
+    "method": "POST",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "http://localhost:5001/api/blocks/preview",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 780, "y": 460,
+    "wires": [["l_fn_extract_url"]]
+  },
+  {
+    "id": "l_fn_extract_url",
+    "type": "function",
+    "z": "tab_lighting",
+    "name": "Extract URL",
+    "func": "var result = msg.payload;\nif (!result || !result.ok || !result.http_path) {\n    node.error('Preview failed: ' + JSON.stringify(result));\n    node.status({fill:'red', shape:'dot', text:'error'});\n    return null;\n}\nnode.status({fill:'green', shape:'dot', text: result.http_path});\nmsg.url = 'http://localhost:5001' + result.http_path;\nmsg.headers = {};\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "", "finalize": "", "libs": [],
+    "x": 980, "y": 460,
+    "wires": [["l_http_fetch_image"]]
+  },
+  {
+    "id": "l_http_fetch_image",
+    "type": "http request",
+    "z": "tab_lighting",
+    "name": "GET image",
+    "method": "GET",
+    "ret": "bin",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "", "persist": false, "proxy": "", "authType": "",
+    "x": 1160, "y": 460,
+    "wires": [["l_node_image_preview"]]
+  },
+  {
+    "id": "l_node_image_preview",
+    "type": "image",
+    "z": "tab_lighting",
+    "name": "Preview",
+    "width": "400",
+    "data": "payload",
+    "dataType": "msg",
+    "thumbnail": false,
+    "active": true,
+    "pass": false,
+    "outputs": 0,
+    "x": 1320, "y": 460,
     "wires": []
   }
 ]

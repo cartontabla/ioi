@@ -58,16 +58,16 @@ def generate_preview():
     from backend.blocks.edge.preview import GeneratePreview
     j = request.get_json(silent=True) or {}
     input_path = j['image_path']
-    # Derive thumbnails dir from image path if not provided
-    # Assumes image lives in .../raw/ → thumbnails go in .../thumbnails/
     if 'output_dir' in j:
         output_dir = Path(j['output_dir'])
     else:
         output_dir = Path(input_path).parent.parent / 'thumbnails'
+    full_res = j.get('full_res', False)
+    max_size = 99999 if full_res else j.get('max_size', 800)
     result = GeneratePreview().run(
         input_path=input_path,
         output_dir=output_dir,
-        max_size=j.get('max_size', 800),
+        max_size=max_size,
         quality=j.get('quality', 90),
     )
     if result['ok']:

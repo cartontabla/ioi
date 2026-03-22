@@ -35,6 +35,26 @@ def load(project_id):
     return jsonify(result), 200 if result['ok'] else 404
 
 
+@bp.route('/api/project/<project_id>/clean', methods=['POST'])
+def clean(project_id):
+    """Delete all files inside a project (raw, corrected, thumbnails) but keep the structure."""
+    import shutil
+    from pathlib import Path
+    j = request.get_json(silent=True) or {}
+    subdirs = j.get('subdirs', ['raw', 'corrected', 'thumbnails', 'tiles', 'logs'])
+    project_dir = Path(config.PROJECTS_DIR) / project_id
+    if not project_dir.exists():
+        return jsonify({'ok': False, 'reason': 'project-not-found'}), 404
+    cleaned = []
+    for sub in subdirs:
+        path = project_dir / sub
+        if path.exists():
+            shutil.rmtree(path)
+            path.mkdir()
+            cleaned.append(sub)
+    return jsonify({'ok': True, 'project_id': project_id, 'cleaned': cleaned})
+
+
 @bp.route('/api/project/<project_id>/tile', methods=['POST'])
 def append_tile(project_id):
     from backend.blocks.project.append import AppendTile

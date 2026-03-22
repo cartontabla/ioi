@@ -5,6 +5,7 @@ Instantiated once at module load time.
 """
 import config
 from backend.devices.camera import SmartCamera
+from backend.devices.lighting import LightingController
 from backend.mqtt_interface import MQTTClient
 
 camera = SmartCamera(
@@ -12,7 +13,10 @@ camera = SmartCamera(
     framerate=config.CAMERA_FRAMERATE,
     ring_size=config.CAMERA_RING_SIZE,
     use_picamera=config.USE_PICAMERA,
+    capture_resolution=config.CAPTURE_RESOLUTION,
 )
+
+lighting = LightingController()
 
 mqtt = MQTTClient(
     host=config.MQTT_HOST,

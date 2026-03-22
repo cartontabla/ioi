@@ -19,6 +19,9 @@ CAMERA_JPEG_QUALITY = int(os.environ.get('CAMERA_JPEG_QUALITY', '80'))
 # Try PiCamera on RPi, fallback to OpenCV
 USE_PICAMERA = IS_RASPBERRY_PI and os.environ.get('USE_PICAMERA', 'true').lower() == 'true'
 
+# Still capture resolution (max sensor resolution for scientific capture)
+CAPTURE_RESOLUTION = tuple(map(int, os.environ.get('CAPTURE_RESOLUTION', '4056,3040').split(',')))
+
 # ===== MQTT Configuration =====
 MQTT_HOST = os.environ.get('MQTT_HOST', 'localhost')
 MQTT_PORT = int(os.environ.get('MQTT_PORT', '1883'))

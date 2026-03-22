@@ -1,0 +1,16 @@
+[Unit]
+Description=IOI Smart Camera Backend
+After=network.target
+
+[Service]
+Type=simple
+User=lino
+WorkingDirectory=/home/lino/IOI
+ExecStart=/usr/bin/python3 /home/lino/IOI/run.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/tmp/ioi_backend.log
+StandardError=append:/tmp/ioi_backend.log
+
+[Install]
+WantedBy=multi-user.target

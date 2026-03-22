@@ -16,10 +16,14 @@ if config.ENABLE_CORS:
 from backend.api.capture import bp as capture_bp
 from backend.api.project import bp as project_bp
 from backend.api.blocks import bp as blocks_bp
+from backend.api.lighting import bp as lighting_bp
+from backend.api.calibration import bp as calibration_bp
 
 app.register_blueprint(capture_bp)
 app.register_blueprint(project_bp)
 app.register_blueprint(blocks_bp)
+app.register_blueprint(lighting_bp)
+app.register_blueprint(calibration_bp)
 
 # MJPEG stream
 if config.ENABLE_MJPEG_STREAM:
