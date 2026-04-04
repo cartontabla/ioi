@@ -13,19 +13,18 @@ def _camera():
 
 
 def _capture_and_average(n: int, output_path: Path) -> dict:
-    """Capture N full-resolution stills, average them, save as TIFF."""
+    """Capture N full-resolution stills with a single mode switch, average them, save as TIFF."""
     cam = _camera()
-    frames = []
-    for _ in range(n):
-        frame = cam.capture_still()
-        if frame is not None:
-            frames.append(frame.astype(np.float32))
+    frames = cam.capture_stills_batch(n)
 
     if not frames:
         return {'ok': False, 'reason': 'no-frames'}
 
-    stack = np.stack(frames, axis=0)
-    averaged = np.mean(stack, axis=0).astype(np.uint16)
+    # Incremental average to avoid stacking all frames in memory at once
+    avg = frames[0].astype(np.float32)
+    for f in frames[1:]:
+        avg += f.astype(np.float32)
+    averaged = (avg / len(frames)).astype(np.uint16)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(output_path), averaged)

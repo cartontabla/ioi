@@ -32,6 +32,7 @@ class SmartCamera:
         self.ring = deque(maxlen=ring_size)
         self.latest_frame: Optional[np.ndarray] = None
         self.lock = Lock()
+        self._cam_lock = Lock()  # serializes camera access between stream loop and still capture
         self.running = False
         self.source: Optional[str] = None
         self._thread: Optional[Thread] = None
@@ -46,6 +47,13 @@ class SmartCamera:
         self.running = True
         if PICAMERA2_AVAILABLE and self._use_picamera:
             self.source = 'picamera2'
+            self._cam = Picamera2()
+            cfg = self._cam.create_video_configuration(
+                main={"size": self.resolution, "format": "RGB888"}
+            )
+            self._cam.configure(cfg)
+            self._cam.start()
+            time.sleep(0.5)
             self._thread = Thread(target=self._picamera2_loop, daemon=True)
         else:
             self.source = 'opencv'
@@ -56,32 +64,28 @@ class SmartCamera:
         self.running = False
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=2.0)
-        self._cam = None
+        if self._cam:
+            try:
+                self._cam.stop()
+                self._cam.close()
+            except Exception:
+                pass
+            self._cam = None
 
     # ------------------------------------------------------------------ capture loops
 
     def _picamera2_loop(self):
         try:
-            self._cam = Picamera2()
-            cfg = self._cam.create_video_configuration(
-                main={"size": self.resolution, "format": "RGB888"}
-            )
-            self._cam.configure(cfg)
-            self._cam.start()
-            time.sleep(0.5)  # let sensor settle
             while self.running:
-                array = self._cam.capture_array()          # H×W×3 RGB
+                with self._cam_lock:
+                    array = self._cam.capture_array()      # H×W×3 RGB
                 bgr = cv2.cvtColor(array, cv2.COLOR_RGB2BGR)
                 with self.lock:
                     self.latest_frame = bgr
                     self.ring.append(bgr.copy())
                 time.sleep(1.0 / max(1, self.framerate))
-            self._cam.stop()
-            self._cam.close()
         except Exception as e:
-            print(f'picamera2 error, falling back to OpenCV: {e}')
-            self.source = 'opencv'
-            self._opencv_loop()
+            print(f'picamera2 loop error: {e}')
 
     def _opencv_loop(self):
         cap = cv2.VideoCapture(0)
@@ -114,6 +118,31 @@ class SmartCamera:
 
     # ------------------------------------------------------------------ still capture
 
+    def capture_stills_batch(self, n: int) -> list:
+        """
+        Capture n full-resolution stills with a SINGLE mode switch.
+        Avoids camera firmware timeout caused by rapid repeated mode switches.
+        """
+        if self.source == 'picamera2' and self._cam:
+            frames = []
+            with self._cam_lock:
+                still_cfg = self._cam.create_still_configuration(
+                    main={"size": self.capture_resolution, "format": "RGB888"}
+                )
+                self._cam.switch_mode(still_cfg)
+                try:
+                    for _ in range(n):
+                        array = self._cam.capture_array("main")
+                        frames.append(cv2.cvtColor(array, cv2.COLOR_RGB2BGR))
+                finally:
+                    video_cfg = self._cam.create_video_configuration(
+                        main={"size": self.resolution, "format": "RGB888"}
+                    )
+                    self._cam.switch_mode(video_cfg)
+            return frames
+        else:
+            return [f for f in (self.get_frame() for _ in range(n)) if f is not None]
+
     def capture_still(self, path: str = None) -> Optional[np.ndarray]:
         """
         Capture a full-resolution still frame as BGR numpy array.
@@ -122,10 +151,11 @@ class SmartCamera:
         Never saves as JPEG — TIFF only for archival.
         """
         if self.source == 'picamera2' and self._cam:
-            still_cfg = self._cam.create_still_configuration(
-                main={"size": self.capture_resolution, "format": "RGB888"}
-            )
-            array = self._cam.switch_mode_and_capture_array(still_cfg, "main")
+            with self._cam_lock:
+                still_cfg = self._cam.create_still_configuration(
+                    main={"size": self.capture_resolution, "format": "RGB888"}
+                )
+                array = self._cam.switch_mode_and_capture_array(still_cfg, "main")
             bgr = cv2.cvtColor(array, cv2.COLOR_RGB2BGR)
             if path:
                 cv2.imwrite(str(path), bgr)

@@ -46,7 +46,7 @@
     "name": "Capture Dark",
     "props": [{"p":"payload"}],
     "repeat": "", "crontab": "", "once": false, "onceDelay": 0,
-    "payload": "{\"n\":10}", "payloadType": "json",
+    "payload": "{\"n\":3}", "payloadType": "json",
     "x": 150, "y": 200,
     "wires": [["d_fn_prepare"]]
   },
@@ -129,7 +129,7 @@
     "name": "Capture Flat",
     "props": [{"p":"payload"}],
     "repeat": "", "crontab": "", "once": false, "onceDelay": 0,
-    "payload": "{\"n\":10}", "payloadType": "json",
+    "payload": "{\"n\":3}", "payloadType": "json",
     "x": 150, "y": 200,
     "wires": [["f_fn_light_on"]]
   },
